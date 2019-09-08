@@ -8,11 +8,11 @@ set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 set(CPP_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 
 add_library(main SHARED
-    ${CPP_SOURCE_DIR}/barnes.cpp
+    ${CPP_SOURCE_DIR}/graph_nn.cpp
     ${CPP_SOURCE_DIR}/python-interface.cpp
     ${CPP_SOURCE_DIR}/cnpy.cpp
 )
-add_executable(maintest  ${CPP_SOURCE_DIR}/test_barnes.cpp) #${CPP_SOURCE_DIR}/barnes.cpp )
+add_executable(maintest  ${CPP_SOURCE_DIR}/test_graph_nn.cpp) #${CPP_SOURCE_DIR}/graph_nn.cpp )
 add_executable(cnpy_example ${CPP_SOURCE_DIR}/cnpy.cpp ${CPP_SOURCE_DIR}/cnpy_example.cpp)
 
 set_property(TARGET maintest PROPERTY CXX_STANDARD 14)
