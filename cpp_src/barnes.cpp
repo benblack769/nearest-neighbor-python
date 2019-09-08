@@ -3,6 +3,7 @@
 #include <memory>
 #include <fstream>
 #include <cmath>
+#include <cassert>
 #include <iostream>
 #include <unordered_map>
 /*struct SpacialTree{
@@ -58,7 +59,7 @@ bool is_split_right(WalkData & wd, const vecf & target){
     float target_pos = target[wd.cur_splitdim];
     return (target_pos > right_pos);
 }
-bool right_in_bound(WalkData & wd, const vecf & target, float maxdist){
+/*bool right_in_bound(WalkData & wd, const vecf & target, float maxdist){
     float bound = boundary(wd);
     float target_loc = target[wd.cur_splitdim];
     return target_loc + maxdist >= bound;
@@ -67,7 +68,7 @@ bool left_in_bound(WalkData & wd, const vecf & target, float maxdist){
     float bound = boundary(wd);
     float target_loc = target[wd.cur_splitdim];
     return target_loc - maxdist <= bound;
-}
+}*/
 bool is_leaf(SpacialNode & n){
     return !n.left && !n.right;
 }
@@ -166,24 +167,61 @@ void add_node(BarnesAccessor * ba, const vecf & target, pos_id pos){
         }
     }
 }
-void fetch_close_ids_rec(WalkData & wd, SpacialNode & cur_node, const vecf & target, std::vector<pos_id> & sim_ids, float max_diff, int max_count){
-    if(is_leaf(cur_node)){
-        sim_ids.push_back(cur_node.leaf_id);
+float sqr(float x){
+    return x * x;
+}
+float distance(const vecf & v1,const vecf & v2){
+    assert(v1.size() == v2.size());
+    float sum = 0;
+    for(int i = 0; i < v1.size(); i++){
+        sum += sqr(v1[i] - v2[i]);
     }
-    if(cur_node.left && left_in_bound(wd,target,max_diff)){
+    return sqrt(sum);
+}
+struct DistWalkData{
+    vecf dim_dists;
+    float tot_dist;
+};
+bool diff_ok(float diff, float max_diff){
+    return sqrt(diff) < max_diff;
+}
+void fetch_close_ids_rec(BarnesAccessor * ba, WalkData & wd, SpacialNode & cur_node, const vecf & target, std::vector<pos_id> & sim_ids, bool has_diffed, float cur_diff, float max_diff, int max_count){
+    if(is_leaf(cur_node)){
+        vecf cur_vec = fetch_vec(ba,cur_node.leaf_id);
+        if(distance(cur_vec,target) <= max_diff){
+            sim_ids.push_back(cur_node.leaf_id);
+        }
+    }
+    bool actual_dir = is_split_right(wd,target);
+
+    float new_block_alt = wd.cur_blocksize/4;
+    float old_blockcen = boundary(wd);//.block_pos[wd.cur_splitdim] + wd.cur_blocksize/2;
+    float olf_diff_alt = sqr(old_blockcen - target[wd.cur_splitdim]);
+    float diff_alt_left = sqr((old_blockcen - new_block_alt) - target[wd.cur_splitdim]);
+    float diff_alt_right = sqr((old_blockcen + new_block_alt) - target[wd.cur_splitdim]);
+    float new_diff_left = cur_diff + diff_alt_left - olf_diff_alt;
+    float new_diff_right = cur_diff + diff_alt_right - olf_diff_alt;
+
+    float blocksize_dimwidth = wd.cur_blocksize/2;//sqrt((wd.num_dim - wd.cur_splitdim)*sqr(wd.cur_blocksize/2) + wd.cur_splitdim*sqr(wd.cur_blocksize/4));
+    //std::cout << blocksize_dimwidth << "\n";
+    bool left_ok = sqrt(new_diff_left) < blocksize_dimwidth + max_diff;
+    bool right_ok = sqrt(new_diff_right) < blocksize_dimwidth + max_diff;
+    if(cur_node.left && (left_ok || !has_diffed)){
         bool split_right = false;
+        bool left_diffed = has_diffed || split_right != actual_dir;
         walk_down(wd,split_right);
-        fetch_close_ids_rec(wd,*cur_node.left.get(),target,sim_ids,max_diff,max_count);
+        fetch_close_ids_rec(ba,wd,*cur_node.left.get(),target,sim_ids,left_diffed,new_diff_left,max_diff,max_count);
         walk_up(wd,split_right);
     }
     if(sim_ids.size() > max_count){
         return;
     }
-    if(cur_node.right && right_in_bound(wd,target,max_diff)){
+    if(cur_node.right && (right_ok || !has_diffed)){
         //std::cout << "arg\n";
         bool split_right = true;
+        bool right_diffed = has_diffed || split_right != actual_dir;
         walk_down(wd,split_right);
-        fetch_close_ids_rec(wd,*cur_node.right.get(),target,sim_ids,max_diff,max_count);
+        fetch_close_ids_rec(ba,wd,*cur_node.right.get(),target,sim_ids,right_diffed,new_diff_right,max_diff,max_count);
         walk_up(wd,split_right);
     }
 }
@@ -242,7 +280,9 @@ std::vector<pos_id> fetch_similar(BarnesAccessor * ba,const float * position, fl
     vecf pos_vec(position,position+ba->pos_size);
     normalize(pos_vec);
     WalkData root = root_data(ba->pos_size);
-    fetch_close_ids_rec(root,*ba->root.get(),pos_vec,res,max_distance,max_count);
+    float sqr_diff_cen = distance(pos_vec,vecf(ba->pos_size,0.0f));
+    float start_diff = sqr_diff_cen;
+    fetch_close_ids_rec(ba,root,*ba->root.get(),pos_vec,res,false,start_diff,max_distance,max_count);
     return res;
 }
 vecf fetch_vec(BarnesAccessor * ba,pos_id id){
