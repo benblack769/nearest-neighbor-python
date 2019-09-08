@@ -8,23 +8,15 @@
 using namespace std;
 
 constexpr int POS_SIZE = 300;
-constexpr int NUM_POS = 100000;
+constexpr int NUM_POS = 10000;
 const pos_id SPEC_POS_IDX = 412;
 vector<float> compare_position(){
     vector<float> pos(POS_SIZE,0.5f);
     return pos;
 }
 vector<float> compare_position2(){
-    vector<float> pos(POS_SIZE);
-    std::random_device rd;
-
-    std::mt19937 e2(rd());
-
-    std::normal_distribution<float> dist(0.0f, 10.0f);
-
-    for(float & v : pos){
-        v = dist(e2);
-    }
+    vector<float> pos(POS_SIZE,0.1f);
+    pos[4] = -1;
     return pos;
 }
 vector<float> generate_positions(){
@@ -34,7 +26,7 @@ vector<float> generate_positions(){
 
     std::mt19937 e2(rd());
 
-    std::normal_distribution<float> dist(0.0f, 10.0f);
+    std::normal_distribution<float> dist(0, 10);
     for(float & v : all_poses){
         v = dist(e2);
     }
@@ -50,6 +42,7 @@ vector<pos_id> gen_ids(){
         cur_idx += 1;
     }
     return all_poses;
+
 }
 
 int main(){
@@ -60,22 +53,21 @@ int main(){
         add_position(accessor,ids[i],&posses[i*POS_SIZE]);
     }
     auto cmp_pos = compare_position();
-    std::vector<pos_id> sim = fetch_similar(accessor,cmp_pos.data(), 0.00001f, 50);
+    std::vector<pos_id> sim = fetch_similar(accessor,cmp_pos.data(), 0.000001f, 50);
     std::cout << sim.size() << "\n";
     //std::cout << sim[0] << "\n";
-    //std::cout << sim[1] << "\n";
 
     if(sim.size() == 0 || sim.size() > 1 || sim[0] != (SPEC_POS_IDX)){
         std::cout << "failed fetch 1\n";
     }
     auto cmp_pos2 = compare_position2();
     update_position(accessor, (SPEC_POS_IDX),cmp_pos2.data());
-    std::vector<pos_id> sim2 = fetch_similar(accessor,cmp_pos2.data(), 0.3f, 10000);
-    std::cout << sim2.size() << endl;
-    //vecf outvec = fetch_vec(accessor,sim2[3]);
-    //for(float v : outvec){
-    //    cout << v << " ";
-    //}
+    std::vector<pos_id> sim2 = fetch_similar(accessor,cmp_pos2.data(), 0.3, 10000);
+    std::cout << sim2.size() << "\n";
+    vecf outvec = fetch_vec(accessor,sim2[3]);
+    for(float v : outvec){
+        cout << v << " ";
+    }
     cout << "\n";
     if(sim2.size() == 0 || sim2.size() > 1 || sim2[0] != (SPEC_POS_IDX)){
         std::cout << "failed fetch 2\n";
