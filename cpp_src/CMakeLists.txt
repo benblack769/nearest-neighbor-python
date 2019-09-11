@@ -11,6 +11,7 @@ add_library(main SHARED
     ${CPP_SOURCE_DIR}/graph_nn.cpp
     ${CPP_SOURCE_DIR}/python-interface.cpp
     ${CPP_SOURCE_DIR}/cnpy.cpp
+    ${CPP_SOURCE_DIR}/data_accessor.cpp
 )
 add_executable(maintest  ${CPP_SOURCE_DIR}/test_graph_nn.cpp) #${CPP_SOURCE_DIR}/graph_nn.cpp )
 add_executable(cnpy_example ${CPP_SOURCE_DIR}/cnpy.cpp ${CPP_SOURCE_DIR}/cnpy_example.cpp)

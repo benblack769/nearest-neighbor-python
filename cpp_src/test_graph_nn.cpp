@@ -44,11 +44,11 @@ vector<float> generate_positions(){
     return all_poses;
 }
 vector<pos_id> gen_ids(){
-    int cur_idx = 0;
+    int cur_idx = 5;
     vector<pos_id> all_poses(NUM_POS);
     for(pos_id & v : all_poses){
         v = (cur_idx);
-        cur_idx += 1;
+        cur_idx += 2;
     }
     return all_poses;
 }
@@ -56,15 +56,18 @@ vector<pos_id> gen_ids(){
 int main(){
     GraphAccessor * accessor = create_graph_accessor("temp",POS_SIZE);
     auto posses = generate_positions();
+    vector<pos_id> ids = gen_ids();
 
     cnpy::npy_save("arr1.npy",&posses[0],{NUM_POS,POS_SIZE},"w");
-    add_all_positions(accessor,{"arr1.npy"});
+    cnpy::npy_save("ids.npy",&ids[0],{NUM_POS},"w");
+    add_all_positions(accessor,{make_pair("arr1.npy","ids.npy")});
     auto cmp_pos = compare_position();
     std::vector<pos_id> sim = fetch_similar(accessor,cmp_pos.data(), 0.00001f, 50);
     std::cout << sim.size() << "\n";
-
     if(sim.size() == 0 || sim.size() > 1 || sim[0] != (SPEC_POS_IDX)){
         std::cout << "failed fetch 1\n";
     }
+    vecf out_data = fetch_vec(accessor,ids[SPEC_POS_IDX]);
+    std::cout << out_data[0] << "  " << out_data[1] << "\n";
     free_graph_accessor(accessor);
 }
