@@ -1,0 +1,68 @@
+/*
+Algorithm:
+
+Idea: dot(Selector, query) = similarity
+
+Maximizing similarity between selector and query is the goal
+
+Selectors are associated with saved data, so it is a fixed set.
+All selectors are added up front and formed into a data structure.
+This data structure mutates as the items are querried from the set
+
+The data structure is a probability binning + graph structure.
+
+The idea is that all selectors will have an overall probability
+in proportion to the number of querries it scored highly on in the past.
+It is then connected to the other nodes that scored highly on that query.
+
+These connections are weighted up on how close the selectors are wrt the query.
+
+    dot(selector_1 * query, selector_2 * query)
+
+And weighted down based on thier high level probability.
+
+I.e. the weights are based on the P(x|y) / P(x) = P(x,y) / (P(x)P(y))
+
+Because each node will have a cap on the number of possible connections
+(weighted by sqrt(P(x)), its overall probability), it needs to remove old ones to add new ones
+
+In particular, the scheme from counting most common elements in a stream:
+
+if x not in edges:
+    if there are empty slots:
+        add x
+    else:
+        for e in edges:
+            weight(e) -= new_weight
+            if weight < 0:
+                remove e
+        if there are empty slots:
+            add x
+else:
+    weight(x) += new_weight
+
+This should be a good approximation of keeping track of the most weighted elements.
+
+
+More specifics on sampling:
+
+The global distribution can be efficiently stored and sampled in a cumlative sum tree:
+      82
+   50     32
+15   35  24  8
+
+The global distribution will be sampled with some probabilty which decreases as more samples are found.
+I.e. P(global) = a/(n+a), where a is a constant and n is the number of samples taken so far
+
+To sample the local distribution (i.e. distribution of nodes close to samples already taken), first sample the
+nodes based on similarity to query. I.e., find an f(x) such that f(s(s,q)) ~= P(s,q) is inversely proportional to density of the space.
+We already know that density ~= distance ^ (num_dims), so
+
+    f(x) = pow(x/min(xs),-sqrt(300))
+
+And then sample from the local distribution weighted by the weight of the connection
+
+At the end of sampling, whether terminated by finding something sufficiently close or by checking enough cases,
+the top k similar items are found, and connections between them are added. The global cumsum tree is updated with the top k.
+
+*/
