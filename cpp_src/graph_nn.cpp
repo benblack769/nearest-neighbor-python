@@ -1,5 +1,4 @@
 #include "graph_nn.h"
-#include "cnpy.h"
 #include "data_accessor.h"
 #include <cassert>
 #include <algorithm>
@@ -107,27 +106,26 @@ GraphAccessor * create_graph_accessor(const char * accessor_path,int position_si
 void free_graph_accessor(GraphAccessor * ba){
     delete ba;
 }
-void add_all_positions(GraphAccessor * ba,std::vector<std::pair<std::string,std::string>> npy_filenames){
-    for(auto namepair : npy_filenames){
-        cnpy::NpyArray data = cnpy::npy_load(namepair.first);
-        cnpy::NpyArray ids = cnpy::npy_load(namepair.second);
+void add_positions(GraphAccessor * ba,const std::vector<float> & positions, const std::vector<pos_id> & ids_vec){
+    size_t num_add = ids_vec.size();
+    assert(num_add == positions.size() / ba->num_dim);
 
-        vecf all_data = data.as_vec<float>();
-        std::vector<pos_ty> ids_vec = ids.as_vec<uint64_t>();
-
-        std::vector<IdPair> id_pairs(ids_vec.size());
-        pos_ty start_pos = ba->vec_datas.num_items();
-        for(size_t i = 0; i < id_pairs.size(); i++){
-            id_pairs[i] = IdPair{ids_vec[i],i+start_pos};
-        }
-
-        ba->vec_datas.add_data(all_data);
-        ba->all_ids.add_data(id_pairs);
+    std::vector<IdPair> id_pairs(num_add);
+    pos_ty start_pos = ba->vec_datas.num_items();
+    for(size_t i = 0; i < id_pairs.size(); i++){
+        id_pairs[i] = IdPair{ids_vec[i],i+start_pos};
     }
+
+    ba->vec_datas.add_data(positions);
+    ba->all_ids.add_data(id_pairs);
 }
 //endline seperated list of ids
-std::vector<pos_id> fetch_similar(GraphAccessor * ba,const float * position, float max_distance, int max_count){
-    return std::vector<pos_id>();
+std::vector<pos_id> fetch_similar(GraphAccessor * ba, const float * position, int fetch_count){
+    std::vector<pos_id> result(fetch_count);
+    for(int i = 0; i < fetch_count; i++){
+        result[i]=i;
+    }
+    return result;
 }
 template <class RandIterator, class T,class CmpFnTy>
   RandIterator my_lower_bound (RandIterator first, RandIterator last, const T& val,CmpFnTy cmp_fn)
