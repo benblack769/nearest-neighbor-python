@@ -45,52 +45,26 @@ public:
         return accessor.get_next_data((char*)out_data.data());
     }
 };
-template<class item_ty>
-class ValDataAccessor{
-private:
-    DataAccessor accessor;
-public:
-    ValDataAccessor(std::string folder):
-        accessor(folder,sizeof(item_ty)){
-    }
-    size_t num_items()const{
-        return accessor.num_items();
-    }
-    void add_data(const item_ty & item){
-        accessor.add_data((char*)(&item),1);
-    }
-    void add_data(const std::vector<item_ty> & items){
-        size_t add_count = items.size();
-        accessor.add_data((char*)items.data(),add_count);
-    }
-    item_ty get_item(size_t pos)const{
-        item_ty out_data;
-        accessor.get_item((char*)(&out_data),pos);
-        return out_data;
-    }
-};
 using FVecDataAccessor = VecDataAccessor<float>;
-using FixedGraphDataAccessor = VecDataAccessor<pos_ty>;
 struct IdPair{
     pos_id id;
     pos_ty pos;
+    bool operator < (const IdPair & other)const{
+        return id < other.id;
+    }
 };
-using IdAccessor = ValDataAccessor<IdPair>;
+using IdData = std::vector<IdPair>;
 
-struct Layer{
-    FixedGraphDataAccessor layer_accessor;
-};
 struct GraphAccessor{
     std::string path;
     size_t num_dim;
-    std::vector<Layer> layers;
     FVecDataAccessor vec_datas;
-    IdAccessor all_ids;
+    IdData all_ids;
     GraphAccessor(std::string folder,size_t in_num_dim):
         path(folder),
         num_dim(in_num_dim),
         vec_datas(folder,num_dim),
-        all_ids(folder){
+        all_ids(){
 
     }
 };
@@ -115,15 +89,19 @@ void add_positions(GraphAccessor * ba,const std::vector<float> & positions, cons
     for(size_t i = 0; i < id_pairs.size(); i++){
         id_pairs[i] = IdPair{ids_vec[i],i+start_pos};
     }
+    std::sort(id_pairs.begin(),id_pairs.end());
 
     ba->vec_datas.add_data(positions);
-    ba->all_ids.add_data(id_pairs);
+    size_t old_size = ba->all_ids.size();
+    ba->all_ids.insert(ba->all_ids.end(),id_pairs.begin(),id_pairs.end());
+    std::inplace_merge(ba->all_ids.begin(),ba->all_ids.begin()+old_size,ba->all_ids.end());
 }
 //endline seperated list of ids
-std::vector<pos_id> fetch_similar(GraphAccessor * ba, const float * position, int fetch_count){
-    std::vector<pos_id> result(fetch_count);
+std::vector<ValIdPair> fetch_similar(GraphAccessor * ba, const float * position, int fetch_count){
+    std::vector<ValIdPair> result(fetch_count);
     for(int i = 0; i < fetch_count; i++){
-        result[i]=i;
+        result[i].val=10;
+        result[i].id = i;
     }
     return result;
 }
@@ -144,15 +122,18 @@ template <class RandIterator, class T,class CmpFnTy>
   }
   return first;
 }
-pos_ty get_pos(IdAccessor & accessor,pos_id id){
+pos_ty get_pos(IdData & id_pairs,pos_id id){
     pos_id begin = 0;
-    pos_id end = accessor.num_items();
+    pos_id end = id_pairs.size();
     pos_id lower_bound_idx = my_lower_bound(begin,end,id,[&](pos_id idx1,pos_id id){
-        return accessor.get_item(idx1).id < id;
+        return id_pairs.at(idx1).id < id;
     });
-    IdPair out_item = accessor.get_item(lower_bound_idx);
+    IdPair out_item = id_pairs.at(lower_bound_idx);
     assert(out_item.id == id);
     return out_item.pos;
+}
+void update_position(GraphAccessor * ba,const float * position,pos_id id){
+
 }
 vecf fetch_vec(GraphAccessor * ba,pos_id id){
     pos_ty pos = get_pos(ba->all_ids,id);
