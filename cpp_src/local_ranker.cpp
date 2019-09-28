@@ -1,4 +1,7 @@
-#include "local_ranker.h"
+#include <cstdint>
+#include <cstddef>
+//#include "local_ranker.h"
+
 constexpr uint64_t mask_for_shift(int shift_val){
     uint64_t mask = ~uint64_t(0);
     return ~(mask << shift_val);

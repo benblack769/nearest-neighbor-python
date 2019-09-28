@@ -18,12 +18,13 @@ vector<float> compare_position(){
     vector<float> pos(POS_SIZE,0.5f);
     return pos;
 }
+size_t rand_count = 0;
 vector<float> generate_positions(int NUM_POS){
     vector<float> all_poses(NUM_POS * POS_SIZE);
 
-    std::random_device rd;
-
-    std::mt19937 e2(rd());
+    //std::random_device rd;
+    std::mt19937 e2(rand_count);
+    rand_count+=1;
 
     std::normal_distribution<float> dist(0.0f, 10.0f);
     for(float & v : all_poses){
@@ -246,7 +247,7 @@ void time_fast_dot_prod(){
     vecf many_vecs = generate_positions(5000);
     int start = clock();
     float sum = 0;
-    for(int j = 0; j < 300; j++){
+    for(int j = 0; j < 1000; j++){
         for(int i = 0; i < 5000; i++){
             sum += fast_dot_prod(&vec1[0],&many_vecs[i*POS_SIZE],POS_SIZE);
         }

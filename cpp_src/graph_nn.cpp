@@ -3,6 +3,7 @@
 #include <cassert>
 #include <algorithm>
 #include <map>
+#include <iostream>
 #include <unordered_set>
 #include "global_ranker.h"
 #include "local_ranker.h"
@@ -92,6 +93,10 @@ void add_positions(GraphAccessor * ba,const std::vector<float> & positions, cons
     size_t num_add = ids_vec.size();
     assert(num_add == positions.size() / ba->num_dim);
 
+    //add vectors
+    ba->vec_datas.add_data(positions);
+
+    //add ids
     std::vector<IdPair> id_pairs(num_add);
     pos_ty start_pos = ba->vec_datas.num_items();
     for(size_t i = 0; i < id_pairs.size(); i++){
@@ -99,32 +104,90 @@ void add_positions(GraphAccessor * ba,const std::vector<float> & positions, cons
     }
     std::sort(id_pairs.begin(),id_pairs.end());
 
-    ba->vec_datas.add_data(positions);
     size_t old_size = ba->all_ids.size();
     ba->all_ids.insert(ba->all_ids.end(),id_pairs.begin(),id_pairs.end());
     std::inplace_merge(ba->all_ids.begin(),ba->all_ids.begin()+old_size,ba->all_ids.end());
+
+    //add to global rankings
+    for(size_t i = 0; i < num_add; i++){
+        ba->global_rank.append_value(5);
+        ba->local_ranks.add_node();
+    }
 }
 float dot_prod(const vecf & buf1,const vecf & buf2){
     return fast_dot_prod(buf1.data(),buf2.data(),buf1.size());
 }
+float sqr(float x){
+    return x * x;
+}
+float pow4(float x){
+    return sqr(sqr(x));
+}
+
 class QuerryData{
 private:
     using loc_ty = uint64_t;
+    struct ValLocPair{
+        loc_ty loc;
+        float val;
+    };
     static constexpr loc_ty NO_PARENT = size_t(-1);
     GlobalRanker collected_ranking;
     std::vector<loc_ty> parents;
     std::vector<pos_ty> idxs;
     std::unordered_set<pos_ty> index_set;
-    UnifSampler sampler;
-    std::map<float,loc_ty> ranking;
+    UnifFloatSampler sampler;
+    std::vector<float> values;
     vecf vec_buffer;
-public:
-
-    std::vector<ValIdPair> get_similar(GraphAccessor * ba,int max_fetch){
-
+private:
+    std::vector<ValLocPair> calc_ranking(){
+        std::vector<ValLocPair> res(idxs.size());
+        for(size_t i = 0; i < res.size(); i++){
+            res[i] = ValLocPair{.loc=i,.val=values[i]};
+        }
+        std::sort(res.begin(),res.end(),[](const ValLocPair & v1,const ValLocPair & v2){
+            return v1.val > v2.val;
+        });
+        return res;
     }
-    void update_similar(GraphAccessor * ba,const std::vector<ValPosPair> & similar){
+    void update_similar(GraphAccessor * ba,const std::vector<ValLocPair> & ranking){
+        const int max_similar = 4;
+        const int similar_count = std::min(size_t(max_similar),idxs.size());
+        std::vector<ValLocPair> similar(ranking.begin(),ranking.begin()+similar_count);
 
+        //update global rankings
+        for(ValLocPair source : similar){
+            loc_ty loc = source.loc;
+            while(loc != NO_PARENT){
+                ba->global_rank.add_weight(idxs.at(loc),1);
+                loc = parents.at(loc);
+            }
+        }
+        //update local rankings of similars pairwise
+        for(ValLocPair source : similar){
+            for(ValLocPair dest : similar){
+                ba->local_ranks.inc_weight(idxs.at(source.loc),idxs.at(dest.loc));
+            }
+        }
+        //update local rankings to parents
+        for(ValLocPair source : similar){
+            loc_ty loc = source.loc;
+            loc_ty parent = parents.at(source.loc);
+            while(parent != NO_PARENT){
+                ba->local_ranks.inc_weight(idxs.at(loc),idxs.at(parent));
+                ba->local_ranks.inc_weight(idxs.at(parent),idxs.at(loc));
+                loc = parent;
+                parent = parents.at(loc);
+            }
+        }
+    }
+    std::vector<ValIdPair> get_similar(GraphAccessor * ba,const std::vector<ValLocPair> & ranking,int fetch_count){
+        std::vector<ValIdPair> best_ids(fetch_count);
+        for(int i = 0; i < fetch_count; i++){
+            best_ids[i] = ValIdPair{.id=ba->all_ids.at(idxs.at(ranking.at(i).loc)).id,
+                                    .val=ranking.at(i).val};
+        }
+        return best_ids;
     }
     pos_ty sample_global(GraphAccessor * ba){
         pos_ty val = ba->global_rank.sample();
@@ -152,7 +215,7 @@ public:
     ValPosPair querry(GraphAccessor * ba,const vecf & vec){
         pos_ty new_pos;
         loc_ty parent_loc;
-        if(sampler.sample() < 0.3){
+        if(sampler.sample() < 0.3 || !collected_ranking.can_sample()){
             new_pos = sample_global(ba);
             parent_loc = NO_PARENT;
         }
@@ -160,34 +223,53 @@ public:
             parent_loc = collected_ranking.sample();
             new_pos = sample_local(ba,parent_loc);
         }
+        size_t new_loc = idxs.size();
         parents.push_back(parent_loc);
         idxs.push_back(new_pos);
+        index_set.insert(new_pos);
+        collected_ranking.append_value(1);
+
         init_vb_if_not(ba);
         ba->vec_datas.get_item(vec_buffer,new_pos);
-        float querry_val = dot_prod(vec,vec_buffer);
-        collected_ranking.append_value(-1);
+        float dot_prod_val = dot_prod(vec,vec_buffer);
+
+        values.push_back(dot_prod_val);
     }
     void querry_until_limit(GraphAccessor * ba,const vecf & vec,int fetch_count, int max_query){
-        std::map<float,pos_ty> best_idxs;
-
+        for(int i = 0; i < std::min(max_query,100); i++){
+            querry(ba,vec);
+        }
+    }
+public:
+    std::vector<ValIdPair> calc(GraphAccessor * ba,const vecf & vec,int fetch_count, int max_query){
+        querry_until_limit(ba,vec,fetch_count,max_query);
+        std::vector<ValLocPair> ranking = calc_ranking();
+        update_similar(ba,ranking);
+        return get_similar(ba,ranking,fetch_count);
     }
 };
-void update_similar(GraphAccessor * ba,const std::vector<ValIdPair> & most_similar,const std::vector<size_t> & parent,const std::vector<pos_ty> & idx){
-
-}
-std::vector<ValIdPair> get_similar(GraphAccessor * ba, const vecf & position, int fetch_count,int max_querry){
-
-
+void normalize(vecf & vec){
+    float sum = 0;
+    for(float v : vec){
+        sum += v;
+    }
+    float inv_sum = 1.0f/sum;
+    for(float & v : vec){
+        v *= inv_sum;
+    }
 }
 //endline seperated list of ids
 std::vector<ValIdPair> fetch_similar(GraphAccessor * ba, const float * position, int fetch_count,int max_querry){
     vecf pos_vec(position,position+ba->num_dim);
-    std::vector<ValIdPair> result(fetch_count);
-    for(int i = 0; i < fetch_count; i++){
-        result[i].val=10;
-        result[i].id = i;
-    }
-    return result;
+    //normalize(pos_vec);
+    QuerryData querry;
+    return querry.calc(ba,pos_vec,fetch_count,max_querry);
+//    std::vector<ValIdPair> result(fetch_count);
+//    for(int i = 0; i < fetch_count; i++){
+//        result[i].val=10;
+//        result[i].id = i;
+//    }
+//    return result;
 }
 template <class RandIterator, class T,class CmpFnTy>
   RandIterator my_lower_bound (RandIterator first, RandIterator last, const T& val,CmpFnTy cmp_fn)
@@ -217,7 +299,7 @@ pos_ty get_pos(IdData & id_pairs,pos_id id){
     return out_item.pos;
 }
 void update_position(GraphAccessor * ba,const float * position,pos_id id){
-
+    //throw "not implemented";
 }
 vecf fetch_vec(GraphAccessor * ba,pos_id id){
     pos_ty pos = get_pos(ba->all_ids,id);

@@ -3,7 +3,7 @@
 
 #define FAST_DOT
 
-#undef USE_INTRIN
+//#undef USE_INTRIN
 #ifdef USE_INTRIN
 #include "intrinsic_help.h"
 float fast_dot_prod(const float * buf1,const float * buf2,size_t size){
@@ -17,13 +17,13 @@ float fast_dot_prod(const float * buf1,const float * buf2,size_t size){
         vec3 += fvec8(buf1+i+2*VS) * fvec8(buf2+i+2*VS);
         vec4 += fvec8(buf1+i+3*VS) * fvec8(buf2+i+3*VS);
     }
-    if(i <= size-BUF_SIZE){
+    if(i <= size-VS){
         vec1 += fvec8(buf1+i) * fvec8(buf2+i);
         i += VS;
-        if(i <= size-BUF_SIZE){
+        if(i <= size-VS){
             vec2 += fvec8(buf1+i) * fvec8(buf2+i);
             i += VS;
-            if(i <= size-BUF_SIZE){
+            if(i <= size-VS){
                 vec3 += fvec8(buf1+i) * fvec8(buf2+i);
                 i += VS;
             }
@@ -32,7 +32,7 @@ float fast_dot_prod(const float * buf1,const float * buf2,size_t size){
     vec1 += vec2 + vec3 + vec4;
 
     float sum = vec1.sum();
-    for(; i <= size; i += 1){
+    for(; i < size; i += 1){
         sum += buf1[i] * buf2[i];
     }
     return sum;
