@@ -7,7 +7,9 @@
 #include <map>
 #include <unordered_set>
 #include "graph_nn.h"
-#include"cnpy.h"
+#include "cnpy.h"
+#include "local_ranker.h"
+#include "fast_dot_prod.h"
 
 using namespace std;
 
@@ -46,6 +48,9 @@ void test_assert(bool cond,string name){
         cout << name << ": FAILED" << endl;
         test_fail_count++;
     }
+    else{
+        cout << name << ": PASSED" << endl;
+    }
 }
 void id_test(){
     GraphAccessor * accessor = create_graph_accessor("temp",POS_SIZE);
@@ -74,16 +79,16 @@ void simple_test(){
     vector<pos_id> ids = gen_ids(NUM_POS);
 
     add_positions(accessor,posses,ids);
-    std::vector<ValIdPair> sim = fetch_similar(accessor,cmp_pos.data(), 1);
+    std::vector<ValIdPair> sim = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
     test_assert(sim.size() == 1 && sim[0].id == (SPEC_POS_IDX),"simplefetch1");
     auto new_cmp_pos = cmp_pos;
     for(float & v : new_cmp_pos){
         v = -0.1;
     }
     update_position(accessor,new_cmp_pos.data(),SPEC_POS_IDX);
-    sim = fetch_similar(accessor,cmp_pos.data(), 1);
+    sim = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
     test_assert(sim.size() == 1 && sim[0].id != (SPEC_POS_IDX),"updatedfetch1");
-    sim = fetch_similar(accessor,new_cmp_pos.data(), 1);
+    sim = fetch_similar(accessor,new_cmp_pos.data(), 1, 1000000);
     test_assert(sim.size() == 1 && sim[0].id == (SPEC_POS_IDX),"simplefetch2");
 
     //vecf out_data = fetch_vec(accessor,ids[SPEC_POS_IDX]);
@@ -134,7 +139,7 @@ void performance_test(){
     for(int i = 0; i < num_iters; i++){
         int start = clock();
         for(int j = 0; j < NUM_QUERRIES; j++){
-            fetch_similar(accessor,posses.data()+j*POS_SIZE,5);
+            fetch_similar(accessor,posses.data()+j*POS_SIZE,5, 1000000);
         }
         int end = clock();
         cout << "time for iter " << i << ": " << (end - start)/float(CLOCKS_PER_SEC) << endl;
@@ -202,13 +207,13 @@ void ranking_test(){
     double false_diff_sum = 0;
     double true_diff_sum = 0;
     for(size_t i = 0; i < NUM_QUERRIES; i++){
-        std::vector<ValIdPair> algo_ranking = fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank);
+        std::vector<ValIdPair> algo_ranking = fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank, 1000000);
 
 
         //uniqueness test
         unordered_set<pos_id> true_r = from_idpairs(true_ranking[i]);//.begin(),true_ranking[i].end());
         unordered_set<pos_id> algo_r = from_idpairs(algo_ranking);//(algo_ranking.begin(),algo_ranking.end());
-        test_assert(algo_r.size() == num_to_rank,"sizetest2");
+        assert(algo_r.size() == num_to_rank && "sizetest2");
         assert(algo_r.size() == true_r.size());
         assert(true_ranking[i].size() == num_to_rank);
 
@@ -228,11 +233,48 @@ void ranking_test(){
     cout << "found " << diff_count << " diffs out of " << NUM_QUERRIES*num_to_rank << " possiblities\n";
     cout << "true diff: " << true_diff_sum << ". False diff: " << false_diff_sum << " \n";
 }
-
+int sigbit_test(){
+    test_assert(sigbit_index(0xf12) == 11,"assert12");
+    test_assert(sigbit_index(0x212) == 9,"assert10");
+    test_assert(sigbit_index(0x212000) == 9+12,"assert21");
+    test_assert(sigbit_index(0x2120fff00) == 9+24,"assert21");
+    test_assert(sigbit_index(0x1120ff0abcf00) == 12*4,"assert92416");
+    test_assert(sigbit_index(0x4120ff0abcf00) == 2+12*4,"assert924162");
+}
+void time_fast_dot_prod(){
+    vecf vec1 = compare_position();
+    vecf many_vecs = generate_positions(5000);
+    int start = clock();
+    float sum = 0;
+    for(int j = 0; j < 300; j++){
+        for(int i = 0; i < 5000; i++){
+            sum += fast_dot_prod(&vec1[0],&many_vecs[i*POS_SIZE],POS_SIZE);
+        }
+    }
+    int end = clock();
+    if(sum != 0){
+        cout << "fast dot prod time: " << (end - start)/float(CLOCKS_PER_SEC) << endl;
+    }
+}
+void test_fast_dot_prod(){
+    vecf vec1 = generate_positions(1);
+    vecf vec2 = generate_positions(1);
+    float true_dot = dot(vec1.data(),vec2.data(),POS_SIZE);
+    float compare_dot = fast_dot_prod(vec1.data(),vec2.data(),POS_SIZE);
+    bool worked = abs(true_dot - compare_dot) < 0.00001 ||
+            (true_dot * 0.9999 < compare_dot &&
+             compare_dot * 0.9999 < true_dot);
+    test_assert(worked,"fast_dot_prod_check");
+    cout << true_dot << endl;
+    cout << compare_dot << endl;
+}
 int main(){
+    sigbit_test();
     simple_test();
     ranking_test();
+    test_fast_dot_prod();
     id_test();
+    time_fast_dot_prod();
     //performance_test();
     //simple_test();
     if(test_fail_count == 0){

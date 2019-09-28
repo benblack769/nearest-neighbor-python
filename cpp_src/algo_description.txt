@@ -7,19 +7,19 @@ Maximizing similarity between selector and query is the goal
 
 Selectors are associated with saved data, so it is a fixed set.
 All selectors are added up front and formed into a data structure.
-This data structure mutates as the items are querried from the set
+This data structure mutates as the items are queried from the set
 
 The data structure is a probability binning + graph structure.
 
 The idea is that all selectors will have an overall probability
-in proportion to the number of querries it scored highly on in the past.
+in proportion to the number of queries it scored highly on in the past.
 It is then connected to the other nodes that scored highly on that query.
 
 These connections are weighted up on how close the selectors are wrt the query.
 
     dot(selector_1 * query, selector_2 * query)
 
-And weighted down based on thier high level probability.
+And weighted down based on their high level probability.
 
 I.e. the weights are based on the P(x|y) / P(x) = P(x,y) / (P(x)P(y))
 

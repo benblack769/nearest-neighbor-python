@@ -2,10 +2,16 @@
 #include "data_accessor.h"
 #include <cassert>
 #include <algorithm>
+#include <map>
+#include <unordered_set>
+#include "global_ranker.h"
+#include "local_ranker.h"
+#include "fast_dot_prod.h"
 
 constexpr uint64_t MAX_ARRAY_SIZE = 2*(1LL<<30);
 using idx_ty = uint64_t;
 using pos_ty = uint64_t;
+using pos_vector = std::vector<pos_ty>;
 
 template<class item_ty>
 class VecDataAccessor{
@@ -60,6 +66,8 @@ struct GraphAccessor{
     size_t num_dim;
     FVecDataAccessor vec_datas;
     IdData all_ids;
+    GlobalRanker global_rank;
+    LocalRanker local_ranks;
     GraphAccessor(std::string folder,size_t in_num_dim):
         path(folder),
         num_dim(in_num_dim),
@@ -96,8 +104,84 @@ void add_positions(GraphAccessor * ba,const std::vector<float> & positions, cons
     ba->all_ids.insert(ba->all_ids.end(),id_pairs.begin(),id_pairs.end());
     std::inplace_merge(ba->all_ids.begin(),ba->all_ids.begin()+old_size,ba->all_ids.end());
 }
+float dot_prod(const vecf & buf1,const vecf & buf2){
+    return fast_dot_prod(buf1.data(),buf2.data(),buf1.size());
+}
+class QuerryData{
+private:
+    using loc_ty = uint64_t;
+    static constexpr loc_ty NO_PARENT = size_t(-1);
+    GlobalRanker collected_ranking;
+    std::vector<loc_ty> parents;
+    std::vector<pos_ty> idxs;
+    std::unordered_set<pos_ty> index_set;
+    UnifSampler sampler;
+    std::map<float,loc_ty> ranking;
+    vecf vec_buffer;
+public:
+
+    std::vector<ValIdPair> get_similar(GraphAccessor * ba,int max_fetch){
+
+    }
+    void update_similar(GraphAccessor * ba,const std::vector<ValPosPair> & similar){
+
+    }
+    pos_ty sample_global(GraphAccessor * ba){
+        pos_ty val = ba->global_rank.sample();
+        while(index_set.count(val)){
+            val = ba->global_rank.sample();
+        }
+        return val;
+    }
+    pos_ty sample_local(GraphAccessor * ba,loc_ty parent_loc){
+        pos_ty parent = idxs.at(parent_loc);
+        if(!ba->local_ranks.can_sample(parent)){
+            return sample_global(ba);
+        }
+        pos_ty child = ba->local_ranks.sample_local(parent);
+        if(index_set.count(child)){
+            return sample_global(ba);
+        }
+        return child;
+    }
+    void init_vb_if_not(GraphAccessor * ba){
+        if(vec_buffer.size() != ba->num_dim){
+            vec_buffer.resize(ba->num_dim);
+        }
+    }
+    ValPosPair querry(GraphAccessor * ba,const vecf & vec){
+        pos_ty new_pos;
+        loc_ty parent_loc;
+        if(sampler.sample() < 0.3){
+            new_pos = sample_global(ba);
+            parent_loc = NO_PARENT;
+        }
+        else{
+            parent_loc = collected_ranking.sample();
+            new_pos = sample_local(ba,parent_loc);
+        }
+        parents.push_back(parent_loc);
+        idxs.push_back(new_pos);
+        init_vb_if_not(ba);
+        ba->vec_datas.get_item(vec_buffer,new_pos);
+        float querry_val = dot_prod(vec,vec_buffer);
+        collected_ranking.append_value(-1);
+    }
+    void querry_until_limit(GraphAccessor * ba,const vecf & vec,int fetch_count, int max_query){
+        std::map<float,pos_ty> best_idxs;
+
+    }
+};
+void update_similar(GraphAccessor * ba,const std::vector<ValIdPair> & most_similar,const std::vector<size_t> & parent,const std::vector<pos_ty> & idx){
+
+}
+std::vector<ValIdPair> get_similar(GraphAccessor * ba, const vecf & position, int fetch_count,int max_querry){
+
+
+}
 //endline seperated list of ids
-std::vector<ValIdPair> fetch_similar(GraphAccessor * ba, const float * position, int fetch_count){
+std::vector<ValIdPair> fetch_similar(GraphAccessor * ba, const float * position, int fetch_count,int max_querry){
+    vecf pos_vec(position,position+ba->num_dim);
     std::vector<ValIdPair> result(fetch_count);
     for(int i = 0; i < fetch_count; i++){
         result[i].val=10;
