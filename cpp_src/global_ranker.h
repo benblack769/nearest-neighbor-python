@@ -13,8 +13,6 @@ private:
     std::vector<val_ty> value_weights;
     //std::vector<pos_ty> value_idxs;
 
-    std::mt19937 e2;
-
     void set_weight(pos_ty pos,val_ty weight){
         val_ty diff = weight - value_weights.at(pos);
         value_weights.at(pos) = weight;
@@ -41,12 +39,11 @@ public:
     bool can_sample(){
         return value_weights.size() != 0;
     }
-    pos_ty sample(){
+    pos_ty sample(UnifIntSampler & sampler){
         assert(cumsum_weight.size() > 0);
         val_ty total_val = cumsum_weight.front();
-        std::uniform_int_distribution<val_ty> dist(0,total_val);
 
-        val_ty sample = dist(e2);
+        val_ty sample = sampler.sample(total_val);
         pos_ty pos = 0;
 
         val_ty cur_val = 0;

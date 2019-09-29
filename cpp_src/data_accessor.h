@@ -14,7 +14,7 @@ private:
     std::vector<char> raw_data;
     size_t stream_pos;
 public:
-    DataAccessor(std::string folder,size_t in_type_size){
+    DataAccessor(std::string ,size_t in_type_size){
         type_size = in_type_size;
         stream_pos = 0;
     }

@@ -196,7 +196,7 @@ double sim_metric(double val1,double val2){
 }
 void ranking_test(){
     const size_t NUM_POS = 1000;
-    const size_t NUM_QUERRIES = 2000;
+    const size_t NUM_QUERRIES = 1000;
     cout << "arg" << endl;
     auto posses = generate_positions(NUM_POS);
     auto querries = generate_positions(NUM_QUERRIES);

@@ -2,6 +2,7 @@
 #include "types.h"
 #include <vector>
 #include <cstddef>
+#include <iostream>
 #include <algorithm>
 #include <cassert>
 #include "unif_float_sampler.h"
@@ -33,11 +34,11 @@ public:
         value_ty count_val = 0;
         for(size_t i = 0; i < size; i++){
             count_val += values[i];
-            if(count_val < target){
+            if(target < count_val){
                 return ids[i];
             }
         }
-        return ids.back();
+        throw std::runtime_error("didn't find ids");
     }
     void increment(pos_ty pos){
         size_t idx = NO_IDX;
@@ -137,7 +138,10 @@ public:
     }
     pos_ty sample_local(pos_ty source){
         assert(can_sample(source));
-        vec.at(source).sample(sampler);
+        return vec.at(source).sample(sampler);
+    }
+    size_t size_of(pos_ty source){
+        return vec.at(source).size();
     }
     bool can_sample(pos_ty source){
         return vec.at(source).size() > 0;
