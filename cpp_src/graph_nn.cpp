@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <map>
 #include <iostream>
+#include <unordered_map>
 #include <unordered_set>
 #include "global_ranker.h"
 #include "local_ranker.h"
@@ -66,14 +67,14 @@ struct GraphAccessor{
     std::string path;
     size_t num_dim;
     FVecDataAccessor vec_datas;
-    IdData all_ids;
+    std::unordered_map<pos_id,pos_ty> id_mapping;
+    std::vector<pos_id> pos_ids;
     GlobalRanker global_rank;
     LocalRanker local_ranks;
     GraphAccessor(std::string folder,size_t in_num_dim):
         path(folder),
         num_dim(in_num_dim),
-        vec_datas(folder,num_dim),
-        all_ids(){
+        vec_datas(folder,num_dim){
 
     }
 };
@@ -97,16 +98,12 @@ void add_positions(GraphAccessor * ba,const std::vector<float> & positions, cons
     ba->vec_datas.add_data(positions);
 
     //add ids
-    std::vector<IdPair> id_pairs(num_add);
-    pos_ty start_pos = ba->vec_datas.num_items();
-    for(size_t i = 0; i < id_pairs.size(); i++){
-        id_pairs[i] = IdPair{ids_vec[i],i+start_pos};
+    pos_ty start_pos = ba->pos_ids.size();
+    for(size_t i = 0; i < ids_vec.size(); i++){
+        assert(ba->id_mapping.count(ids_vec[i]) == 0);
+        ba->id_mapping[ids_vec[i]] = i+start_pos;
+        ba->pos_ids.push_back(ids_vec[i]);
     }
-    std::sort(id_pairs.begin(),id_pairs.end());
-
-    size_t old_size = ba->all_ids.size();
-    ba->all_ids.insert(ba->all_ids.end(),id_pairs.begin(),id_pairs.end());
-    std::inplace_merge(ba->all_ids.begin(),ba->all_ids.begin()+old_size,ba->all_ids.end());
 
     //add to global rankings
     for(size_t i = 0; i < num_add; i++){
@@ -184,7 +181,7 @@ private:
     std::vector<ValIdPair> get_similar(GraphAccessor * ba,const std::vector<ValLocPair> & ranking,int fetch_count){
         std::vector<ValIdPair> best_ids(fetch_count);
         for(int i = 0; i < fetch_count; i++){
-            best_ids[i] = ValIdPair{.id=ba->all_ids.at(idxs.at(ranking.at(i).loc)).id,
+            best_ids[i] = ValIdPair{.id=ba->pos_ids.at(idxs.at(ranking.at(i).loc)),
                                     .val=ranking.at(i).val};
         }
         return best_ids;
@@ -236,7 +233,7 @@ private:
         values.push_back(dot_prod_val);
     }
     void querry_until_limit(GraphAccessor * ba,const vecf & vec,int fetch_count, int max_query){
-        for(int i = 0; i < std::min(max_query,100); i++){
+        for(int i = 0; i < max_query && idxs.size() < ba->global_rank.size()/2; i++){
             querry(ba,vec);
         }
     }
@@ -261,48 +258,15 @@ void normalize(vecf & vec){
 //endline seperated list of ids
 std::vector<ValIdPair> fetch_similar(GraphAccessor * ba, const float * position, int fetch_count,int max_querry){
     vecf pos_vec(position,position+ba->num_dim);
-    //normalize(pos_vec);
     QuerryData querry;
     return querry.calc(ba,pos_vec,fetch_count,max_querry);
-//    std::vector<ValIdPair> result(fetch_count);
-//    for(int i = 0; i < fetch_count; i++){
-//        result[i].val=10;
-//        result[i].id = i;
-//    }
-//    return result;
-}
-template <class RandIterator, class T,class CmpFnTy>
-  RandIterator my_lower_bound (RandIterator first, RandIterator last, const T& val,CmpFnTy cmp_fn)
-{
-  RandIterator it;
-  RandIterator count, step;
-  count = last - first;
-  while (count>0)
-  {
-    it = first; step=count/2; it += step;
-    if (cmp_fn(it,val)) {                 // or: if (comp(*it,val)), for version (2)
-      first=++it;
-      count-=step+1;
-    }
-    else count=step;
-  }
-  return first;
-}
-pos_ty get_pos(IdData & id_pairs,pos_id id){
-    pos_id begin = 0;
-    pos_id end = id_pairs.size();
-    pos_id lower_bound_idx = my_lower_bound(begin,end,id,[&](pos_id idx1,pos_id id){
-        return id_pairs.at(idx1).id < id;
-    });
-    IdPair out_item = id_pairs.at(lower_bound_idx);
-    assert(out_item.id == id);
-    return out_item.pos;
 }
 void update_position(GraphAccessor * ba,const float * position,pos_id id){
     //throw "not implemented";
 }
 vecf fetch_vec(GraphAccessor * ba,pos_id id){
-    pos_ty pos = get_pos(ba->all_ids,id);
+    pos_ty pos = ba->id_mapping.at(id);
+    std::cout << pos << "\n";
     vecf res(ba->num_dim);
     ba->vec_datas.get_item(res,pos);
     return res;

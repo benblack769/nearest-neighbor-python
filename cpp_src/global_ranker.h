@@ -29,6 +29,9 @@ public:
     void add_weight(pos_ty pos,val_ty weight){
         set_weight(pos,this->weight(pos)+weight);
     }
+    size_t size(){
+        return value_weights.size();
+    }
     void append_value(float weight){
         size_t loc = value_weights.size();
         value_weights.push_back(0);

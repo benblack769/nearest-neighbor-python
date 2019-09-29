@@ -15,7 +15,7 @@ using namespace std;
 
 constexpr int POS_SIZE = 300;
 vector<float> compare_position(){
-    vector<float> pos(POS_SIZE,0.5f);
+    vector<float> pos(POS_SIZE,2.0f);
     return pos;
 }
 size_t rand_count = 0;
@@ -64,13 +64,13 @@ void id_test(){
     add_positions(accessor,posses1,ids1);
     add_positions(accessor,posses2,ids2);
     add_positions(accessor,posses3,ids3);
-    vecf res22 = fetch_vec(accessor,ids2[1]);
-    test_assert(std::equal(res22.begin(),res22.end(),posses2.begin()+POS_SIZE),"id_test");
+    vecf res22 = fetch_vec(accessor,ids2[0]);
+    test_assert(std::equal(res22.begin(),res22.end(),posses2.begin()),"id_test");
 
     free_graph_accessor(accessor);
 }
 void simple_test(){
-    constexpr int NUM_POS = 10000;
+    constexpr int NUM_POS = 1000;
     const pos_id SPEC_POS_IDX = 412;
 
     GraphAccessor * accessor = create_graph_accessor("temp",POS_SIZE);
@@ -80,17 +80,22 @@ void simple_test(){
     vector<pos_id> ids = gen_ids(NUM_POS);
 
     add_positions(accessor,posses,ids);
-    std::vector<ValIdPair> sim = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
-    test_assert(sim.size() == 1 && sim[0].id == (SPEC_POS_IDX),"simplefetch1");
+    std::vector<ValIdPair> sim1 = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
+    std::vector<ValIdPair> sim2 = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
+    std::vector<ValIdPair> sim3 = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
+    test_assert((sim1.size() == 1 && sim1[0].id == ids.at(SPEC_POS_IDX)) ||
+                (sim2.size() == 1 && sim2[0].id == ids.at(SPEC_POS_IDX)) ||
+                (sim3.size() == 1 && sim3[0].id == ids.at(SPEC_POS_IDX))
+            ,"simplefetch1");
     auto new_cmp_pos = cmp_pos;
     for(float & v : new_cmp_pos){
-        v = -0.1;
+        v = -4;
     }
     update_position(accessor,new_cmp_pos.data(),SPEC_POS_IDX);
-    sim = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
-    test_assert(sim.size() == 1 && sim[0].id != (SPEC_POS_IDX),"updatedfetch1");
+    std::vector<ValIdPair> sim = fetch_similar(accessor,cmp_pos.data(), 1, 1000000);
+    test_assert(sim.size() == 1 && sim[0].id != ids.at(SPEC_POS_IDX),"updatedfetch1");
     sim = fetch_similar(accessor,new_cmp_pos.data(), 1, 1000000);
-    test_assert(sim.size() == 1 && sim[0].id == (SPEC_POS_IDX),"simplefetch2");
+    test_assert(sim.size() == 1 && sim[0].id == ids.at(SPEC_POS_IDX),"simplefetch2");
 
     //vecf out_data = fetch_vec(accessor,ids[SPEC_POS_IDX]);
     //std::cout << out_data[0] << "  " << out_data[1] << "\n";
@@ -161,7 +166,7 @@ vector<vector<ValIdPair>> ideal_ranking(vecf posses, vecf querries,int rank_size
     for(pos_id i = 0; i < num_querries; i++){
         map<float,pos_id> pos_vals;
         for(pos_id j = 0; j < num_posses; j++){
-            float distance = dot(&posses[j*POS_SIZE],&querries[i*POS_SIZE],POS_SIZE);
+            float distance = fast_dot_prod(&posses[j*POS_SIZE],&querries[i*POS_SIZE],POS_SIZE);
             if(pos_vals.size() < rank_size){
                 pos_vals[distance] = j;
             }
@@ -190,8 +195,8 @@ double sim_metric(double val1,double val2){
     return val1 - val2;
 }
 void ranking_test(){
-    const size_t NUM_POS = 100;
-    const size_t NUM_QUERRIES = 200;
+    const size_t NUM_POS = 1000;
+    const size_t NUM_QUERRIES = 2000;
     cout << "arg" << endl;
     auto posses = generate_positions(NUM_POS);
     auto querries = generate_positions(NUM_QUERRIES);
@@ -208,7 +213,10 @@ void ranking_test(){
     double false_diff_sum = 0;
     double true_diff_sum = 0;
     for(size_t i = 0; i < NUM_QUERRIES; i++){
-        std::vector<ValIdPair> algo_ranking = fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank, 1000000);
+        //fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank, 100);
+    }
+    for(size_t i = 0; i < NUM_QUERRIES; i++){
+        std::vector<ValIdPair> algo_ranking = fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank, 100);
 
 
         //uniqueness test

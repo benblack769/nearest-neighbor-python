@@ -8,6 +8,7 @@ set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 
 set(CPP_SOURCE_DIR ${PROJECT_SOURCE_DIR})
 
+
 CHECK_INCLUDE_FILE(immintrin.h HAS_INTRIN)
 
 add_library(fast_dot_prod STATIC ${CPP_SOURCE_DIR}/fast_dot_prod.cpp)

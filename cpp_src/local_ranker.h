@@ -20,7 +20,7 @@ class Ranker{
 public:
     Ranker(size_t in_max_size){
         values.reserve(in_max_size);
-        values.reserve(in_max_size);
+        ids.reserve(in_max_size);
         max_size = in_max_size;
     }
     size_t size(){
