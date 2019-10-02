@@ -6,10 +6,12 @@
 #include <ctime>
 #include <map>
 #include <unordered_set>
+#include <queue>
 #include "graph_nn.h"
 #include "cnpy.h"
 #include "local_ranker.h"
 #include "fast_dot_prod.h"
+#include "most_significant_bit.h"
 
 using namespace std;
 
@@ -164,19 +166,21 @@ vector<vector<ValIdPair>> ideal_ranking(vecf posses, vecf querries,int rank_size
     size_t num_posses = posses.size()/POS_SIZE;
     vector<vector<ValIdPair>> closest_list(num_querries);
     for(pos_id i = 0; i < num_querries; i++){
-        map<float,pos_id> pos_vals;
+        auto compare = [](ValIdPair v1,ValIdPair v2){return v1.val > v2.val;};
+        std::priority_queue<ValIdPair,std::vector<ValIdPair>,decltype(compare)> best_items(compare);
         for(pos_id j = 0; j < num_posses; j++){
             float distance = fast_dot_prod(&posses[j*POS_SIZE],&querries[i*POS_SIZE],POS_SIZE);
-            if(pos_vals.size() < rank_size){
-                pos_vals[distance] = j;
+            if(best_items.size() < rank_size){
+                best_items.push(ValIdPair{.id=j,.val=distance});
             }
-            else if(pos_vals.begin()->second < distance){
-                pos_vals.erase(pos_vals.begin());
-                pos_vals[distance] = j;
+            else if(best_items.top().val < distance){
+                best_items.pop();
+                best_items.push(ValIdPair{.id=j,.val=distance});
             }
         }
-        for(auto pos_pair : pos_vals){
-            closest_list[i].push_back(ValIdPair{pos_pair.second,pos_pair.first});
+        while(best_items.size()){
+            closest_list[i].push_back(best_items.top());
+            best_items.pop();
         }
     }
     return  closest_list;
@@ -196,7 +200,7 @@ double sim_metric(double val1,double val2){
 }
 void ranking_test(){
     const size_t NUM_POS = 1000;
-    const size_t NUM_QUERRIES = 1000;
+    const size_t NUM_QUERRIES = 5000;
     cout << "arg" << endl;
     auto posses = generate_positions(NUM_POS);
     auto querries = generate_positions(NUM_QUERRIES);
@@ -212,19 +216,21 @@ void ranking_test(){
     int diff_count = 0;
     double false_diff_sum = 0;
     double true_diff_sum = 0;
-    for(size_t i = 0; i < NUM_QUERRIES; i++){
-        //fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank, 100);
+    for(size_t j = 0; j < 2; j++){
+        for(size_t i = 0; i < NUM_QUERRIES; i++){
+            fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank, 100);
+        }
     }
     for(size_t i = 0; i < NUM_QUERRIES; i++){
         std::vector<ValIdPair> algo_ranking = fetch_similar(accessor,&querries[i*POS_SIZE],num_to_rank, 100);
-
+        std::vector<ValIdPair> cur_true_ranking = true_ranking[i];
 
         //uniqueness test
-        unordered_set<pos_id> true_r = from_idpairs(true_ranking[i]);//.begin(),true_ranking[i].end());
+        unordered_set<pos_id> true_r = from_idpairs(cur_true_ranking);//.begin(),true_ranking[i].end());
         unordered_set<pos_id> algo_r = from_idpairs(algo_ranking);//(algo_ranking.begin(),algo_ranking.end());
         assert(algo_r.size() == num_to_rank && "sizetest2");
         assert(algo_r.size() == true_r.size());
-        assert(true_ranking[i].size() == num_to_rank);
+        assert(cur_true_ranking.size() == num_to_rank);
 
         //correctness_test
         for(ValIdPair al_r : algo_ranking){
@@ -233,22 +239,24 @@ void ranking_test(){
             }
         }
         for(ValIdPair v : algo_ranking){
-            false_diff_sum += v.val;
+            false_diff_sum += fast_dot_prod(&posses[POS_SIZE*v.id],&querries[i*POS_SIZE],POS_SIZE);
         }
-        for(ValIdPair v : true_ranking[i]){
-            true_diff_sum += v.val;
+        for(ValIdPair v : cur_true_ranking){
+            true_diff_sum += fast_dot_prod(&posses[POS_SIZE*v.id],&querries[i*POS_SIZE],POS_SIZE);
         }
     }
     cout << "found " << diff_count << " diffs out of " << NUM_QUERRIES*num_to_rank << " possiblities\n";
     cout << "true diff: " << true_diff_sum << ". False diff: " << false_diff_sum << " \n";
 }
 int sigbit_test(){
-    test_assert(sigbit_index(0xf12) == 11,"assert12");
-    test_assert(sigbit_index(0x212) == 9,"assert10");
-    test_assert(sigbit_index(0x212000) == 9+12,"assert21");
-    test_assert(sigbit_index(0x2120fff00) == 9+24,"assert21");
-    test_assert(sigbit_index(0x1120ff0abcf00) == 12*4,"assert92416");
-    test_assert(sigbit_index(0x4120ff0abcf00) == 2+12*4,"assert924162");
+    test_assert(most_significant_bit(0) == -1,"assert0");
+    test_assert(most_significant_bit(1) == 0,"assert1");
+    test_assert(most_significant_bit(0xf12) == 11,"assert12");
+    test_assert(most_significant_bit(0x212) == 9,"assert10");
+    test_assert(most_significant_bit(0x212000) == 9+12,"assert21");
+    test_assert(most_significant_bit(0x2120fff00) == 9+24,"assert21");
+    test_assert(most_significant_bit(0x1120ff0abcf00) == 12*4,"assert92416");
+    test_assert(most_significant_bit(0x4120ff0abcf00) == 2+12*4,"assert924162");
 }
 void time_fast_dot_prod(){
     vecf vec1 = compare_position();

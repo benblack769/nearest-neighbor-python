@@ -20,7 +20,7 @@ public:
     UnifIntSampler():
         e2(){}
     uint64_t sample(uint64_t max){
-        std::uniform_int_distribution<uint64_t> dist(0,max);
+        std::uniform_int_distribution<uint64_t> dist(0,max-1);
         return dist(e2);
     }
 };

@@ -123,11 +123,10 @@ private:
         max_size = new_size;
     }
 };
-size_t sigbit_index(uint64_t pos);
+//size_t sigbit_index(uint64_t pos);
 class LocalRanker{
 private:
     std::vector<Ranker> vec;
-    UnifFloatSampler sampler;
 public:
     void add_node(){
         size_t max_size = 32;
@@ -136,7 +135,7 @@ public:
     void inc_weight(pos_ty source,pos_ty dest){
         vec.at(source).increment(dest);
     }
-    pos_ty sample_local(pos_ty source){
+    pos_ty sample_local(pos_ty source,UnifFloatSampler & sampler){
         assert(can_sample(source));
         return vec.at(source).sample(sampler);
     }

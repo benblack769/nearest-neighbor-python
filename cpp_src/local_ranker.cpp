@@ -2,6 +2,9 @@
 #include <cstddef>
 //#include "local_ranker.h"
 
+#ifdef USE_INTRINSIC
+
+#else
 constexpr uint64_t mask_for_shift(int shift_val){
     uint64_t mask = ~uint64_t(0);
     return ~(mask << shift_val);
@@ -28,3 +31,4 @@ inline size_t sigbit_index_r<0>(uint64_t pos){
 size_t sigbit_index(uint64_t pos){
     return sigbit_index_r<32>(pos);
 }
+#endif

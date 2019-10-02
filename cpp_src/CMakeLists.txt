@@ -22,12 +22,11 @@ endif()
 add_library(main SHARED
     ${CPP_SOURCE_DIR}/graph_nn.cpp
     ${CPP_SOURCE_DIR}/python-interface.cpp
-    ${CPP_SOURCE_DIR}/data_accessor.cpp
-    ${CPP_SOURCE_DIR}/global_ranker.cpp
-    ${CPP_SOURCE_DIR}/local_ranker.cpp
 )
 target_compile_options(main PRIVATE -Wall -Wextra)
-
+if(HAS_INTRIN)
+    target_compile_definitions(main PRIVATE USE_INTRIN)
+endif()
 
 add_executable(maintest ${CPP_SOURCE_DIR}/test_graph_nn.cpp ${CPP_SOURCE_DIR}/cnpy.cpp) #${CPP_SOURCE_DIR}/graph_nn.cpp )
 add_executable(cnpy_example ${CPP_SOURCE_DIR}/cnpy.cpp ${CPP_SOURCE_DIR}/cnpy_example.cpp)

@@ -74,7 +74,8 @@ struct GraphAccessor{
     LocalRanker similar_ranks;
     //LocalRanker parent_ranks;
     LocalRanker child_ranks;
-    UnifIntSampler sampler;
+    UnifIntSampler isampler;
+    UnifFloatSampler fsampler;
     GraphAccessor(std::string folder,size_t in_num_dim):
         path(folder),
         num_dim(in_num_dim),
@@ -94,6 +95,7 @@ GraphAccessor * create_graph_accessor(const char * accessor_path,int position_si
 void free_graph_accessor(GraphAccessor * ba){
     delete ba;
 }
+
 void add_positions(GraphAccessor * ba,const std::vector<float> & positions, const std::vector<pos_id> & ids_vec){
     size_t num_add = ids_vec.size();
     assert(num_add == positions.size() / ba->num_dim);
@@ -116,6 +118,7 @@ void add_positions(GraphAccessor * ba,const std::vector<float> & positions, cons
         ba->similar_ranks.add_node();
     }
 }
+
 float dot_prod(const vecf & buf1,const vecf & buf2){
     return fast_dot_prod(buf1.data(),buf2.data(),buf1.size());
 }
@@ -134,11 +137,10 @@ private:
         float val;
     };
     static constexpr loc_ty NO_PARENT = size_t(-1);
-    GlobalRanker collected_ranking;
+    RankSampler collected_ranking;
     std::vector<loc_ty> parents;
     std::vector<pos_ty> idxs;
     std::unordered_set<pos_ty> index_set;
-    UnifFloatSampler sampler;
     std::vector<float> values;
     vecf vec_buffer;
 private:
@@ -153,7 +155,7 @@ private:
         return res;
     }
     void update_similar(GraphAccessor * ba,const std::vector<ValLocPair> & ranking){
-        const size_t max_similar = 2;
+        const size_t max_similar = 5;
         const int similar_count = std::min(max_similar,idxs.size());
         std::vector<ValLocPair> similar(ranking.begin(),ranking.begin()+similar_count);
 
@@ -184,8 +186,8 @@ private:
             loc_ty loc = source.loc;
             loc_ty parent = parents.at(source.loc);
             while(parent != NO_PARENT){
-                //ba->child_ranks.inc_weight(idxs.at(loc),idxs.at(parent));
-                ba->child_ranks.inc_weight(idxs.at(parent),idxs.at(loc));
+                ba->child_ranks.inc_weight(idxs.at(loc),idxs.at(parent));
+                //ba->child_ranks.inc_weight(idxs.at(parent),idxs.at(loc));
                 loc = parent;
                 parent = parents.at(loc);
             }
@@ -200,31 +202,18 @@ private:
         return best_ids;
     }
     pos_ty sample_global(GraphAccessor * ba){
-        pos_ty val = ba->global_rank.sample(ba->sampler);
+        pos_ty val = ba->global_rank.sample(ba->isampler);
         while(index_set.count(val)){
-            val = ba->global_rank.sample(ba->sampler);
+            val = ba->global_rank.sample(ba->isampler);
         }
         return val;
     }
-    pos_ty sample_similar(GraphAccessor * ba,loc_ty parent_loc){
+    pos_ty sample_local(GraphAccessor * ba,LocalRanker & local,loc_ty parent_loc){
         pos_ty parent = idxs.at(parent_loc);
-        if(!ba->similar_ranks.can_sample(parent)){
+        if(!local.can_sample(parent)){
             return sample_global(ba);
         }
-        pos_ty child = ba->similar_ranks.sample_local(parent);
-        if(index_set.count(child)){
-            return sample_global(ba);
-        }
-        else{
-            return child;
-        }
-    }
-    pos_ty sample_child(GraphAccessor * ba,loc_ty parent_loc){
-        pos_ty parent = idxs.at(parent_loc);
-        if(!ba->child_ranks.can_sample(parent)){
-            return sample_global(ba);
-        }
-        pos_ty child = ba->child_ranks.sample_local(parent);
+        pos_ty child = local.sample_local(parent,ba->fsampler);
         if(index_set.count(child)){
             return sample_global(ba);
         }
@@ -240,29 +229,30 @@ private:
     void querry(GraphAccessor * ba,const vecf & vec){
         pos_ty new_pos;
         loc_ty parent_loc;
-        if(sampler.sample() < 0.3 || !collected_ranking.can_sample()){
+        if(ba->fsampler.sample() < 0.3f || !collected_ranking.can_sample()){
             new_pos = sample_global(ba);
             parent_loc = NO_PARENT;
         }
         else{
-            parent_loc = collected_ranking.sample(ba->sampler);
-            if(sampler.sample() < 0.5f){
-                std::cout << ba->child_ranks.size_of(parent_loc) << "  ";
-                new_pos = sample_child(ba,parent_loc);
+            parent_loc = collected_ranking.sample(ba->isampler);
+            if(ba->fsampler.sample() < 0.5f){
+                //std::cout << ba->child_ranks.size_of(parent_loc) << "  ";
+                new_pos = sample_local(ba,ba->child_ranks,parent_loc);
             }
             else{
-                new_pos = sample_similar(ba,parent_loc);
+                new_pos = sample_local(ba,ba->similar_ranks,parent_loc);
             }
         }
+        loc_ty loc = idxs.size();
         parents.push_back(parent_loc);
         idxs.push_back(new_pos);
         index_set.insert(new_pos);
-        collected_ranking.append_value(1);
 
         init_vb_if_not(ba);
         ba->vec_datas.get_item(vec_buffer,new_pos);
         float dot_prod_val = dot_prod(vec,vec_buffer);
 
+        collected_ranking.add(loc,dot_prod_val);
         values.push_back(dot_prod_val);
     }
     void querry_until_limit(GraphAccessor * ba,const vecf & vec, int max_query){
@@ -275,7 +265,7 @@ public:
         querry_until_limit(ba,vec,max_query);
         std::vector<ValLocPair> ranking = calc_ranking();
         update_similar(ba,ranking);
-        std::cout << "\nnewline\n";
+        //std::cout << "\nnewline\n";
         return get_similar(ba,ranking,fetch_count);
     }
 };
